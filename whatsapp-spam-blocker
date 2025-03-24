@@ -1,0 +1,103 @@
+import logging 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+
+# Set up logging to a file (you can adjust the filename and level as needed)
+logging.basicConfig(filename='blocked_events.log',
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Launch WhatsApp Web using Selenium
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+driver.get('https://web.whatsapp.com')
+
+# Wait for you to scan the QR code manually
+input("Scan the QR code on WhatsApp Web and then press Enter to continue...")
+
+def get_latest_message():
+    """Gets the most recent message from WhatsApp Web."""
+    messages = driver.find_elements("css selector", "div.copyable-text")
+    if messages:
+        return messages[-1].text  # Get the most recent message text
+    return ""
+
+def is_spam(message):
+    """Checks if the message contains any spam keywords."""
+    spam_keywords = [
+        'urgent', '234', 'nigeria', 'prize', 'winner', 
+        'investor', 'bitcoin', 'mr. doe', 'click', 'http', 'free' 
+    ]
+    for word in spam_keywords:
+        if word in message.lower():
+            return True
+    return False
+
+def send_message(reply):
+    """Sends a reply message on WhatsApp Web."""
+    input_box = driver.find_element("xpath", '//div[@contenteditable="true"]')
+    input_box.send_keys(reply)
+    
+    send_button = driver.find_element("xpath", '//button[@data-testid="compose-btn-send"]')
+    send_button.click()
+
+def block_contact(contact_info=""):
+    """
+    Opens the contact info panel, selects the block option,
+    confirms the block, and logs the event.
+    """
+    try:
+        header = driver.find_element("xpath", "//header")
+        header.click()
+        time.sleep(1)
+        
+        block_button = driver.find_element("xpath", "//*[contains(text(), 'Block contact')]")
+        block_button.click()
+        time.sleep(1)
+        
+        confirm_button = driver.find_element("xpath", "//*[contains(text(), 'BLOCK')]")
+        confirm_button.click()
+        time.sleep(1)
+        
+        log_message = f"Contact blocked. Info: {contact_info}"
+        logging.info(log_message)
+        print(log_message)
+    except Exception as e:
+        error_message = f"Error during blocking: {e}"
+        logging.error(error_message)
+        print(error_message)
+
+def check_and_block_codes():
+    """
+    Checks if the current chat's header contains any of the specified codes.
+    If so, logs the event and calls block_contact() to block the sender.
+    """
+    codes_to_block = ['224','385','234','450','973','443','941','817','304','434']
+    
+    try:
+        contact_info_element = driver.find_element("xpath", "//header//div[contains(@class, '_3XrHh')]")
+        contact_info = contact_info_element.text
+        
+        for code in codes_to_block:
+            if f"({code})" in contact_info or f"+{code}" in contact_info:
+                log_message = f"Blocked code detected: {code} in {contact_info}"
+                logging.info(log_message)
+                print(log_message)
+                block_contact(contact_info)
+                break  # Block once and exit the loop
+    except Exception as e:
+        error_message = f"Error checking contact info: {e}"
+        logging.error(error_message)
+        print(error_message)
+
+# Main loop to monitor messages and block contacts with specific codes
+while True:
+    latest_message = get_latest_message()
+    if latest_message:
+        print("Latest message:", latest_message)
+        if is_spam(latest_message):
+            print("Spam detected!")
+            send_message("This message has been flagged as spam.")
+        check_and_block_codes()
+    time.sleep(5)  # Check every 5 seconds
